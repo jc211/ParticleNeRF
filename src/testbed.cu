@@ -202,7 +202,7 @@ void Testbed::set_mode(ETestbedMode mode) {
 			m_use_aux_devices = true;
 		}
 
-		if (m_dlss_provider) {
+		if (m_dlss_provider && m_aperture_size == 0.0f) {
 			m_dlss = true;
 		}
 	} else {
@@ -421,29 +421,27 @@ void Testbed::set_view_dir(const Vector3f& dir) {
 void Testbed::first_training_view() {
 	m_nerf.training.view = 0;
 	set_camera_to_training_view(m_nerf.training.view);
-	reset_accumulation();
 }
 
 void Testbed::last_training_view() {
 	m_nerf.training.view = m_nerf.training.dataset.n_images-1;
 	set_camera_to_training_view(m_nerf.training.view);
-	reset_accumulation();
 }
 
 void Testbed::previous_training_view() {
 	if (m_nerf.training.view != 0) {
 		m_nerf.training.view -= 1;
 	}
+
 	set_camera_to_training_view(m_nerf.training.view);
-	reset_accumulation();
 }
 
 void Testbed::next_training_view() {
 	if (m_nerf.training.view != m_nerf.training.dataset.n_images-1) {
 		m_nerf.training.view += 1;
 	}
+
 	set_camera_to_training_view(m_nerf.training.view);
-	reset_accumulation();
 }
 
 void Testbed::set_camera_to_training_view(int trainview) {
@@ -459,6 +457,8 @@ void Testbed::set_camera_to_training_view(int trainview) {
 
 	m_screen_center = Vector2f::Constant(1.0f) - m_nerf.training.dataset.metadata[trainview].principal_point;
 	m_nerf.training.view = trainview;
+
+	reset_accumulation(true);
 }
 
 void Testbed::reset_camera() {
@@ -543,6 +543,10 @@ inline float linear_to_db(float x) {
 
 template <typename T>
 void Testbed::dump_parameters_as_images(const T* params, const std::string& filename_base) {
+	if (!m_network) {
+		return;
+	}
+
 	size_t non_layer_params_width = 2048;
 
 	size_t layer_params = 0;
@@ -954,7 +958,22 @@ void Testbed::imgui() {
 				}
 				accum_reset |= ImGui::Checkbox("Foveated rendering", &m_foveated_rendering) && !m_dlss;
 				if (m_foveated_rendering) {
-					accum_reset |= ImGui::SliderFloat("Maximum foveation", &m_foveated_rendering_max_scaling, 1.0f, 16.0f, "%.01f", ImGuiSliderFlags_Logarithmic | ImGuiSliderFlags_NoRoundToFormat) && !m_dlss;
+					ImGui::SameLine();
+					ImGui::Text(": %.01fx", m_foveated_rendering_scaling);
+
+					if (ImGui::TreeNodeEx("Foveated rendering settings")) {
+						accum_reset |= ImGui::Checkbox("Dynamic", &m_dynamic_foveated_rendering) && !m_dlss;
+						ImGui::SameLine();
+						accum_reset |= ImGui::Checkbox("Visualize", &m_foveated_rendering_visualize) && !m_dlss;
+
+						if (m_dynamic_foveated_rendering) {
+							accum_reset |= ImGui::SliderFloat("Maximum scaling", &m_foveated_rendering_max_scaling, 1.0f, 16.0f, "%.01f", ImGuiSliderFlags_Logarithmic | ImGuiSliderFlags_NoRoundToFormat) && !m_dlss;
+						} else {
+							accum_reset |= ImGui::SliderFloat("Scaling", &m_foveated_rendering_scaling, 1.0f, 16.0f, "%.01f", ImGuiSliderFlags_Logarithmic | ImGuiSliderFlags_NoRoundToFormat) && !m_dlss;
+						}
+
+						accum_reset |= ImGui::SliderFloat("Fovea diameter", &m_foveated_rendering_full_res_diameter, 0.1f, 0.9f) && !m_dlss;
+					}
 				}
 
 				ImGui::TreePop();
@@ -1236,11 +1255,13 @@ void Testbed::imgui() {
 			if (ImGui::SliderInt("Visualized dimension", &m_visualized_dimension, -1, (int)network_width(m_visualized_layer)-1)) {
 				set_visualized_dim(m_visualized_dimension);
 			}
+
 			if (!m_single_view) { ImGui::EndDisabled(); }
 
-			if (ImGui::SliderInt("Visualized layer", &m_visualized_layer, 0, (int)network_num_forward_activations()-1)) {
+			if (ImGui::SliderInt("Visualized layer", &m_visualized_layer, 0, std::max(0, (int)network_num_forward_activations()-1))) {
 				set_visualized_layer(m_visualized_layer);
 			}
+
 			if (ImGui::Checkbox("Single view", &m_single_view)) {
 				set_visualized_dim(-1);
 				accum_reset = true;
@@ -1390,7 +1411,12 @@ void Testbed::imgui() {
 		ImGui::Text("Snapshot");
 		ImGui::SameLine();
 		if (ImGui::Button("Save")) {
-			save_snapshot(m_imgui.snapshot_path, m_include_optimizer_state_in_snapshot, m_compress_snapshot);
+			try {
+				save_snapshot(m_imgui.snapshot_path, m_include_optimizer_state_in_snapshot, m_compress_snapshot);
+			} catch (std::exception& e) {
+				imgui_error_string = fmt::format("Failed to save snapshot: {}", e.what());
+				ImGui::OpenPopup("Error");
+			}
 		}
 		ImGui::SameLine();
 		if (ImGui::Button("Load")) {
@@ -1776,27 +1802,27 @@ bool Testbed::keyboard_event() {
 
 	if (ImGui::IsKeyPressed('.')) {
 		if (m_single_view) {
-			if (m_visualized_dimension == m_network->width(m_visualized_layer)-1 && m_visualized_layer < m_network->num_forward_activations()-1) {
-				set_visualized_layer(std::max(0, std::min((int)m_network->num_forward_activations()-1, m_visualized_layer+1)));
+			if (m_visualized_dimension == network_width(m_visualized_layer)-1 && m_visualized_layer < network_num_forward_activations()-1) {
+				set_visualized_layer(std::max(0, std::min((int)network_num_forward_activations()-1, m_visualized_layer+1)));
 				set_visualized_dim(0);
 			} else {
-				set_visualized_dim(std::max(-1, std::min((int)m_network->width(m_visualized_layer)-1, m_visualized_dimension+1)));
+				set_visualized_dim(std::max(-1, std::min((int)network_width(m_visualized_layer)-1, m_visualized_dimension+1)));
 			}
 		} else {
-			set_visualized_layer(std::max(0, std::min((int)m_network->num_forward_activations()-1, m_visualized_layer+1)));
+			set_visualized_layer(std::max(0, std::min((int)network_num_forward_activations()-1, m_visualized_layer+1)));
 		}
 	}
 
 	if (ImGui::IsKeyPressed(',')) {
 		if (m_single_view) {
 			if (m_visualized_dimension == 0 && m_visualized_layer > 0) {
-				set_visualized_layer(std::max(0, std::min((int)m_network->num_forward_activations()-1, m_visualized_layer-1)));
-				set_visualized_dim(m_network->width(m_visualized_layer)-1);
+				set_visualized_layer(std::max(0, std::min((int)network_num_forward_activations()-1, m_visualized_layer-1)));
+				set_visualized_dim(network_width(m_visualized_layer)-1);
 			} else {
-				set_visualized_dim(std::max(-1, std::min((int)m_network->width(m_visualized_layer)-1, m_visualized_dimension-1)));
+				set_visualized_dim(std::max(-1, std::min((int)network_width(m_visualized_layer)-1, m_visualized_dimension-1)));
 			}
 		} else {
-			set_visualized_layer(std::max(0, std::min((int)m_network->num_forward_activations()-1, m_visualized_layer-1)));
+			set_visualized_layer(std::max(0, std::min((int)network_num_forward_activations()-1, m_visualized_layer-1)));
 		}
 	}
 
@@ -2373,7 +2399,7 @@ void Testbed::draw_gui() {
 
 			auto& view = m_views[i];
 			Vector2i top_left{x * extent.x(), display_h - (y + 1) * extent.y()};
-			blit_texture(view.foveation, m_rgba_render_textures.at(i)->texture(), m_foveated_rendering ? GL_LINEAR : GL_NEAREST, m_depth_render_textures.at(i)->texture(), 0, top_left, extent);
+			blit_texture(m_foveated_rendering_visualize ? Foveation{} : view.foveation, m_rgba_render_textures.at(i)->texture(), m_foveated_rendering ? GL_LINEAR : GL_NEAREST, m_depth_render_textures.at(i)->texture(), 0, top_left, extent);
 
 			++i;
 		}
@@ -2730,17 +2756,22 @@ void Testbed::train_and_render(bool skip_rendering) {
 			view.render_buffer->resize(render_res);
 
 			if (m_foveated_rendering) {
-				float foveation_warped_full_res_diameter = 0.55f;
-				Vector2f resolution_scale = render_res.cast<float>().cwiseQuotient(view.full_resolution.cast<float>());
+				if (m_dynamic_foveated_rendering) {
+					Vector2f resolution_scale = render_res.cast<float>().cwiseQuotient(view.full_resolution.cast<float>());
 
-				// Only start foveation when DLSS if off or if DLSS is asked to do more than 1.5x upscaling.
-				// The reason for the 1.5x threshold is that DLSS can do up to 3x upscaling, at which point a foveation
-				// factor of 2x = 3.0x/1.5x corresponds exactly to bilinear super sampling, which is helpful in
-				// suppressing DLSS's artifacts.
-				float foveation_begin_factor = m_dlss ? 1.5f : 1.0f;
+					// Only start foveation when DLSS if off or if DLSS is asked to do more than 1.5x upscaling.
+					// The reason for the 1.5x threshold is that DLSS can do up to 3x upscaling, at which point a foveation
+					// factor of 2x = 3.0x/1.5x corresponds exactly to bilinear super sampling, which is helpful in
+					// suppressing DLSS's artifacts.
+					float foveation_begin_factor = m_dlss ? 1.5f : 1.0f;
 
-				resolution_scale = (resolution_scale * foveation_begin_factor).cwiseMin(1.0f).cwiseMax(1.0f / m_foveated_rendering_max_scaling);
-				view.foveation = {resolution_scale, Vector2f::Ones() - view.screen_center, Vector2f::Constant(foveation_warped_full_res_diameter * 0.5f)};
+					resolution_scale = (resolution_scale * foveation_begin_factor).cwiseMin(1.0f).cwiseMax(1.0f / m_foveated_rendering_max_scaling);
+					view.foveation = {resolution_scale, Vector2f::Ones() - view.screen_center, Vector2f::Constant(m_foveated_rendering_full_res_diameter * 0.5f)};
+
+					m_foveated_rendering_scaling = 1.0f / resolution_scale.mean();
+				} else {
+					view.foveation = {Vector2f::Constant(1.0f / m_foveated_rendering_scaling), Vector2f::Ones() - view.screen_center, Vector2f::Constant(m_foveated_rendering_full_res_diameter * 0.5f)};
+				}
 			} else {
 				view.foveation = {};
 			}
@@ -2912,7 +2943,7 @@ void Testbed::init_window(int resw, int resh, bool hidden, bool second_window) {
 	if (primary_device().compute_capability() >= 70) {
 		try {
 			m_dlss_provider = init_vulkan_and_ngx();
-			if (m_testbed_mode == ETestbedMode::Nerf) {
+			if (m_testbed_mode == ETestbedMode::Nerf && m_aperture_size == 0.0f) {
 				m_dlss = true;
 			}
 		} catch (const std::runtime_error& e) {
@@ -3323,7 +3354,7 @@ void Testbed::update_loss_graph() {
 }
 
 uint32_t Testbed::n_dimensions_to_visualize() const {
-	return m_network->width(m_visualized_layer);
+	return m_network ? m_network->width(m_visualized_layer) : 0;
 }
 
 float Testbed::fov() const {
@@ -3343,28 +3374,33 @@ void Testbed::set_fov_xy(const Vector2f& val) {
 }
 
 size_t Testbed::n_params() {
-	return m_network->n_params();
+	return m_network ? m_network->n_params() : 0;
 }
 
 size_t Testbed::n_encoding_params() {
-	return m_network->n_params() - first_encoder_param();
+	return n_params() - first_encoder_param();
 }
 
 size_t Testbed::first_encoder_param() {
+	if (!m_network) {
+		return 0;
+	}
+
 	auto layer_sizes = m_network->layer_sizes();
 	size_t first_encoder = 0;
 	for (auto size : layer_sizes) {
 		first_encoder += size.first * size.second;
 	}
+
 	return first_encoder;
 }
 
 uint32_t Testbed::network_width(uint32_t layer) const {
-	return m_network->width(layer);
+	return m_network ? m_network->width(layer) : 0;
 }
 
 uint32_t Testbed::network_num_forward_activations() const {
-	return m_network->num_forward_activations();
+	return m_network ? m_network->num_forward_activations() : 0;
 }
 
 void Testbed::set_max_level(float maxlevel) {
@@ -3373,6 +3409,7 @@ void Testbed::set_max_level(float maxlevel) {
 	if (hg_enc) {
 		hg_enc->set_max_level(maxlevel);
 	}
+
 	reset_accumulation();
 }
 
@@ -3382,12 +3419,13 @@ void Testbed::set_min_level(float minlevel) {
 	if (hg_enc) {
 		hg_enc->set_quantize_threshold(powf(minlevel, 4.f) * 0.2f);
 	}
+
 	reset_accumulation();
 }
 
 void Testbed::set_visualized_layer(int layer) {
 	m_visualized_layer = layer;
-	m_visualized_dimension = std::max(-1, std::min(m_visualized_dimension, (int)m_network->width(layer)-1));
+	m_visualized_dimension = std::max(-1, std::min(m_visualized_dimension, (int)network_width(layer) - 1));
 	reset_accumulation();
 }
 
@@ -4317,7 +4355,7 @@ void Testbed::render_frame_epilogue(
 	}
 
 	render_buffer.accumulate(m_exposure, stream);
-	render_buffer.tonemap(m_exposure, m_background_color, output_color_space, m_ndc_znear, m_ndc_zfar, stream);
+	render_buffer.tonemap(m_exposure, m_background_color, output_color_space, m_ndc_znear, m_ndc_zfar, m_snap_to_pixel_centers, stream);
 
 	if (m_testbed_mode == ETestbedMode::Nerf) {
 		// Overlay the ground truth image if requested
@@ -4454,6 +4492,10 @@ Testbed::LevelStats compute_level_stats(const float* params, size_t n_params) {
 }
 
 void Testbed::gather_histograms() {
+	if (!m_network) {
+		return;
+	}
+
 	int n_params = (int)m_network->n_params();
 	int first_encoder = first_encoder_param();
 	int n_encoding_params = n_params - first_encoder;
@@ -4525,6 +4567,21 @@ void Testbed::save_snapshot(const fs::path& path, bool include_optimizer_state, 
 	to_json(snapshot["render_aabb_to_local"], m_render_aabb_to_local);
 	snapshot["render_aabb"] = m_render_aabb;
 	to_json(snapshot["up_dir"], m_up_dir);
+	to_json(snapshot["sun_dir"], m_sun_dir);
+	snapshot["exposure"] = m_exposure;
+	to_json(snapshot["background_color"], m_background_color);
+
+	to_json(snapshot["camera"]["matrix"], m_camera);
+	snapshot["camera"]["fov_axis"] = m_fov_axis;
+	to_json(snapshot["camera"]["relative_focal_length"], m_relative_focal_length);
+	to_json(snapshot["camera"]["screen_center"], m_screen_center);
+	snapshot["camera"]["zoom"] = m_zoom;
+	snapshot["camera"]["scale"] = m_scale;
+
+	snapshot["camera"]["aperture_size"] = m_aperture_size;
+	snapshot["camera"]["autofocus"] = m_autofocus;
+	to_json(snapshot["camera"]["autofocus_target"], m_autofocus_target);
+	snapshot["camera"]["autofocus_depth"] = m_slice_plane_z;
 
 	if (m_testbed_mode == ETestbedMode::Nerf) {
 		snapshot["nerf"]["rgb"]["rays_per_batch"] = m_nerf.training.counters_rgb.rays_per_batch;
@@ -4607,6 +4664,28 @@ void Testbed::load_snapshot(const fs::path& path) {
 	}
 
 	// Needs to happen after `load_nerf_post()`
+	if (snapshot.contains("sun_dir")) from_json(snapshot.at("sun_dir"), m_sun_dir);
+	m_exposure = snapshot.value("exposure", m_exposure);
+	if (snapshot.contains("background_color")) from_json(snapshot.at("background_color"), m_background_color);
+
+	if (snapshot.contains("camera")) {
+		if (snapshot["camera"].contains("matrix")) from_json(snapshot["camera"]["matrix"], m_camera);
+		m_fov_axis = snapshot["camera"].value("fov_axis", m_fov_axis);
+		if (snapshot["camera"].contains("relative_focal_length")) from_json(snapshot["camera"]["relative_focal_length"], m_relative_focal_length);
+		if (snapshot["camera"].contains("screen_center")) from_json(snapshot["camera"]["screen_center"], m_screen_center);
+		m_zoom = snapshot["camera"].value("zoom", m_zoom);
+		m_scale = snapshot["camera"].value("scale", m_scale);
+
+		m_aperture_size = snapshot["camera"].value("aperture_size", m_aperture_size);
+		if (m_aperture_size != 0) {
+			m_dlss = false;
+		}
+
+		m_autofocus = snapshot["camera"].value("autofocus", m_autofocus);
+		if (snapshot["camera"].contains("autofocus_target")) from_json(snapshot["camera"]["autofocus_target"], m_autofocus_target);
+		m_slice_plane_z = snapshot["camera"].value("autofocus_depth", m_slice_plane_z);
+	}
+
 	if (snapshot.contains("render_aabb_to_local")) from_json(snapshot.at("render_aabb_to_local"), m_render_aabb_to_local);
 	m_render_aabb = snapshot.value("render_aabb", m_render_aabb);
 	if (snapshot.contains("up_dir")) from_json(snapshot.at("up_dir"), m_up_dir);

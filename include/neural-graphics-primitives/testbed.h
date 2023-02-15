@@ -452,7 +452,8 @@ public:
 #ifdef NGP_PYTHON
 	pybind11::dict compute_marching_cubes_mesh(Eigen::Vector3i res3d = Eigen::Vector3i::Constant(128), BoundingBox aabb = BoundingBox{Eigen::Vector3f::Zero(), Eigen::Vector3f::Ones()}, float thresh=2.5f);
 	pybind11::array_t<float> render_to_cpu(int width, int height, int spp, bool linear, float start_t, float end_t, float fps, float shutter_fraction);
-	pybind11::array_t<float> screenshot(bool linear) const;
+	pybind11::array_t<float> view(bool linear, size_t view) const;
+	pybind11::array_t<float> screenshot(bool linear, bool front_buffer) const;
 	void override_sdf_training_data(pybind11::array_t<float> points, pybind11::array_t<float> distances);
 #endif
 
@@ -1139,7 +1140,11 @@ public:
 
 	bool m_use_aux_devices = false;
 	bool m_foveated_rendering = false;
+	bool m_dynamic_foveated_rendering = true;
+	float m_foveated_rendering_full_res_diameter = 0.55f;
+	float m_foveated_rendering_scaling = 1.0f;
 	float m_foveated_rendering_max_scaling = 2.0f;
+	bool m_foveated_rendering_visualize = false;
 
 	fs::path m_data_path;
 	fs::path m_network_config_path = "base.json";
