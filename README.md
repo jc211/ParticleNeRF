@@ -16,6 +16,11 @@ ParticleNeRF is a fork of [__instant_ngp__](https://github.com/NVlabs/instant-ng
 
 A query point is sampled in space. The features and positions of the particles within a search radius are retrieved. The features and distances from the query point are used to interpolate the feature at the query point. The resulting feature is evaluated by the neural network to give color and density. To train the encoding, the loss gradients are backpropagated through the network, the query feature, and finally into the positions and features of the particles.
 
+# Instructions
+```
+instant-ngp$ ./instant-ngp data/nerf/fox --config configs/nerf/particle.json
+```
+
 # Examples
 ![](docs/assets_readme/sample1.gif)
 
