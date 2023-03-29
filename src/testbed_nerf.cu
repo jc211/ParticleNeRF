@@ -3106,6 +3106,15 @@ void Testbed::train_nerf(uint32_t target_batch_size, bool get_loss_scalar, cudaS
 
 		m_nerf.training.n_steps_since_cam_update = 0;
 	}
+	if(m_train_encoding) {
+		if (auto p_enc = get_particle_encoding()) 
+		{
+			p_enc->training_step(
+				m_stream.get(),
+				m_use_physics
+			);
+		}
+	}
 }
 
 void Testbed::train_nerf_step(uint32_t target_batch_size, Testbed::NerfCounters& counters, cudaStream_t stream) {
@@ -3299,8 +3308,13 @@ void Testbed::train_nerf_step(uint32_t target_batch_size, Testbed::NerfCounters&
 	GPUMatrix<float> coords_gradient_matrix((float*)coords_gradient, floats_per_coord, target_batch_size);
 
 	{
+		m_forward_timer.start(stream);
 		auto ctx = m_network->forward(stream, compacted_coords_matrix, &compacted_rgbsigma_matrix, false, prepare_input_gradients);
+		m_forward_timer.stop(stream);
+
+		m_backward_timer.start(stream);
 		m_network->backward(stream, *ctx, compacted_coords_matrix, compacted_rgbsigma_matrix, gradient_matrix, prepare_input_gradients ? &coords_gradient_matrix : nullptr, false, EGradientMode::Overwrite);
+		m_backward_timer.stop(stream);
 	}
 
 	if (train_extra_dims) {
@@ -3365,11 +3379,11 @@ void Testbed::training_prep_nerf(uint32_t batch_size, cudaStream_t stream) {
 	float alpha = m_nerf.training.density_grid_decay;
 	uint32_t n_cascades = m_nerf.max_cascade+1;
 
-	if (m_training_step < 256) {
-		update_density_grid_nerf(alpha, NERF_GRID_N_CELLS() * n_cascades, 0, stream);
-	} else {
-		update_density_grid_nerf(alpha, NERF_GRID_N_CELLS() / 4 * n_cascades, NERF_GRID_N_CELLS() / 4 * n_cascades, stream);
-	}
+	// if (m_training_step < 256) {
+		update_density_grid_nerf(alpha, NERF_GRIDSIZE()*NERF_GRIDSIZE()*NERF_GRIDSIZE()*n_cascades, 0, stream);
+	// } else {
+		// update_density_grid_nerf(alpha, NERF_GRIDSIZE()*NERF_GRIDSIZE()*NERF_GRIDSIZE()/4*n_cascades, NERF_GRIDSIZE()*NERF_GRIDSIZE()*NERF_GRIDSIZE()/4*n_cascades, stream);
+	// }
 }
 
 void Testbed::optimise_mesh_step(uint32_t n_steps) {

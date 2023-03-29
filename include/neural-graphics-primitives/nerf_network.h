@@ -25,6 +25,7 @@
 #include <tiny-cuda-nn/network.h>
 
 #include <tiny-cuda-nn/network_with_input_encoding.h>
+#include <particles/particle_encoding.h>
 
 NGP_NAMESPACE_BEGIN
 
@@ -79,7 +80,12 @@ public:
 	using json = nlohmann::json;
 
 	NerfNetwork(uint32_t n_pos_dims, uint32_t n_dir_dims, uint32_t n_extra_dims, uint32_t dir_offset, const json& pos_encoding, const json& dir_encoding, const json& density_network, const json& rgb_network) : m_n_pos_dims{n_pos_dims}, m_n_dir_dims{n_dir_dims}, m_dir_offset{dir_offset}, m_n_extra_dims{n_extra_dims} {
-		m_pos_encoding.reset(tcnn::create_encoding<T>(n_pos_dims, pos_encoding, density_network.contains("otype") && (tcnn::equals_case_insensitive(density_network["otype"], "FullyFusedMLP") || tcnn::equals_case_insensitive(density_network["otype"], "MegakernelMLP")) ? 16u : 8u));
+		if(pos_encoding.contains("otype") && tcnn::equals_case_insensitive(pos_encoding["otype"],"Particle")) {
+			m_pos_encoding.reset((tcnn::Encoding<T>*)particle::create_particle_encoding<T>(n_pos_dims, pos_encoding));
+			m_pos_encoding->set_alignment(16);
+		} else { 
+			m_pos_encoding.reset(tcnn::create_encoding<T>(n_pos_dims, pos_encoding, density_network.contains("otype") && (tcnn::equals_case_insensitive(density_network["otype"], "FullyFusedMLP") || tcnn::equals_case_insensitive(density_network["otype"], "MegakernelMLP")) ? 16u : 8u));
+		}
 		uint32_t rgb_alignment = tcnn::minimum_alignment(rgb_network);
 		m_dir_encoding.reset(tcnn::create_encoding<T>(m_n_dir_dims + m_n_extra_dims, dir_encoding, rgb_alignment));
 

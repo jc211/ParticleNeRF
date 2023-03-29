@@ -25,6 +25,9 @@
 #include <neural-graphics-primitives/trainable_buffer.cuh>
 #include <neural-graphics-primitives/triangle_bvh.cuh>
 #include <neural-graphics-primitives/triangle_octree.cuh>
+#include <neural-graphics-primitives/opengl_utils.h>
+
+#include <particles/particle_encoding.h>
 
 #include <tiny-cuda-nn/encodings/grid.h>
 #include <tiny-cuda-nn/loss.h>
@@ -837,11 +840,69 @@ void Testbed::imgui() {
 		ImGui::PopItemWidth();
 
 		m_training_batch_size = next_multiple(m_training_batch_size, batch_size_granularity);
+		if (m_testbed_mode == ETestbedMode::Nerf || m_testbed_mode == ETestbedMode::Image) { 
+			if (auto particle_encoding = get_particle_encoding())  
+			{
+				auto n_levels = particle_encoding->get_n_levels();
+				int level = m_n_particle_level;
+				static int32_t n_particles = 0; 
+				n_particles = particle_encoding->n_particles(level);
+				ImGui::Text("Particles");
+				if(n_levels > 1) 
+					accum_reset |= ImGui::SliderInt("Level", &m_n_particle_level, 0, n_levels-1, "%d");
+				ImGui::Text("%d particles", n_particles); 
+				static float search_radius = 0.0f;
+				search_radius = particle_encoding->get_search_radius(level);
+				if(ImGui::SliderFloat("Search Radius", &search_radius, 0.0001f, 0.4f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
+					particle_encoding->set_search_radius(search_radius, level);
+				}
+				if(ImGui::SliderInt("Num Particles", &n_particles, 1, 100000, "%d", ImGuiSliderFlags_AlwaysClamp)) {
+					particle_encoding->resize(0, n_particles, level);
+				}
+				if(m_use_physics) {
+					ImGui::Text("Physics");
+					ImGui::SliderInt("Physics Loops", (int*)&m_n_physics_loops, 1, 100);
+					ImGui::SliderFloat("Damping", &m_velocity_damping, 0.01f, 1.0f, "%.2f");
+					ImGui::SliderFloat("Timestep", &m_physics_timestep, 0.001f, 0.1f, "%.3f");
+					ImGui::SliderFloat("Nerf Scale", &m_nerf_scale, 0.001f, 0.6f, "%.3f");
+					ImGui::SliderFloat("Alpha", &m_physics_alpha, 0.0f, 1.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+					ImGui::SliderFloat("Min Distance", &m_physics_min_distance, 1e-6f, 0.3f, "%.3f");
+					ImGui::Separator();
+				}
 
+				accum_reset |= ImGui::Checkbox("Render Encoding", &m_render_encoding);
+				ImGui::SameLine();
+				accum_reset |= ImGui::Checkbox("Positions", &m_optimize_particle_positions);
+				ImGui::SameLine();
+				accum_reset |= ImGui::Checkbox("Features", &m_optimize_particle_features);
+				ImGui::SameLine();
+				accum_reset |= ImGui::Checkbox("Physics", &m_use_physics);
+				accum_reset |= ImGui::Combo("RBF", (int*)&particle_encoding->m_rbf_type, particle::RBFTypeStr);
+				if (m_testbed_mode == ETestbedMode::Nerf) {
+					ImGui::Checkbox("Move Widget", &m_move_cameras_widget);
+				}
+				if (m_testbed_mode == ETestbedMode::Nerf) {
+					static float prune_threshold = 5.0f;
+					ImGui::SliderFloat("Prune Threshold", &prune_threshold, 0.0f, 20.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+					if(ImGui::Button("Prune")) {
+						SyncedMultiStream streams(m_stream.get(), particle_encoding->get_n_levels());
+						for(int level=0; level<particle_encoding->get_n_levels(); level++) {
+							auto density = get_density_on_points((NerfPosition*)particle_encoding->get_particle_positions(level), particle_encoding->n_particles(level));
+							tcnn::GPUMatrix<float, RM> density_matrix(density.data(), m_nerf_network->padded_density_output_width(), particle_encoding->n_particles(level));
+							particle_encoding->prune_particles(streams.get(level), prune_threshold, density_matrix, level);
+						}
+					}
+				}
+				ImGui::Separator();
+			}
+		}
 		if (m_train) {
 			std::vector<std::string> timings;
 			if (m_testbed_mode == ETestbedMode::Nerf) {
 				timings.emplace_back(fmt::format("Grid: {:.01f}ms", m_training_prep_ms.ema_val()));
+				timings.emplace_back(fmt::format("Forward: {:.01f}ms", m_forward_ms.ema_val()));
+				timings.emplace_back(fmt::format("Backward: {:.01f}ms", m_backward_ms.ema_val()));
+				timings.emplace_back(fmt::format("Physics: {:.01f}ms", m_physics_ms.ema_val()));
 			} else {
 				timings.emplace_back(fmt::format("Datagen: {:.01f}ms", m_training_prep_ms.ema_val()));
 			}
@@ -1636,7 +1697,7 @@ void Testbed::visualize_nerf_cameras(ImDrawList* list, const Matrix<float, 4, 4>
 void Testbed::draw_visualizations(ImDrawList* list, const Matrix<float, 3, 4>& camera_matrix) {
 	Matrix<float, 4, 4> world2view, view2world, view2proj, world2proj;
 	view2world.setIdentity();
-	view2world.block<3, 4>(0, 0) = camera_matrix;
+	view2world.block<3,4>(0,0) = camera_matrix;
 
 	auto focal = calc_focal_length(Vector2i::Ones(), m_relative_focal_length, m_fov_axis, m_zoom);
 	float zscale = 1.0f / focal[m_fov_axis];
@@ -1653,10 +1714,43 @@ void Testbed::draw_visualizations(ImDrawList* list, const Matrix<float, 3, 4>& c
 	world2proj = view2proj * world2view;
 	float aspect = (float)m_window_res.x() / (float)m_window_res.y();
 
-	// Visualize NeRF training poses
-	if (m_testbed_mode == ETestbedMode::Nerf) {
-		if (m_nerf.visualize_cameras) {
-			visualize_nerf_cameras(list, world2proj);
+	ImGuiIO& io = ImGui::GetIO();
+	float flx = focal.x();
+	float fly = focal.y();
+	Matrix<float, 4, 4> view2proj_guizmo;
+	float zfar = 100.f;
+	float znear = 0.1f;
+	view2proj_guizmo <<
+		fly*2.f/aspect, 0, 0, 0,
+		0, -fly*2.f, 0, 0,
+		0, 0, (zfar+znear)/(zfar-znear), -(2.f*zfar*znear) / (zfar-znear),
+		0, 0, 1, 0;
+	// Visualize 3D cameras for SDF or NeRF use cases
+	if (m_testbed_mode != ETestbedMode::Image) {
+		// Visualize NeRF training poses
+		if (m_testbed_mode == ETestbedMode::Nerf) {
+			if (m_nerf.visualize_cameras) {
+				visualize_nerf_cameras(list, world2proj);
+			}
+
+			if(m_move_cameras_widget){
+				ImGuizmo::SetID(1);
+				ImGuizmo::SetRect(0, 0, io.DisplaySize.x, io.DisplaySize.y);
+				if (ImGuizmo::Manipulate((const float*)&world2view, (const float*)&view2proj_guizmo, ImGuizmo::TRANSLATE, ImGuizmo::LOCAL, (float*)&m_camera_transform, NULL, NULL)) {
+					auto& dataset = m_nerf.training.dataset;
+					auto& xforms = dataset.xforms; 
+					auto& original_xforms = dataset.original_xforms; 
+					uint32_t n = dataset.n_images;
+					Eigen::Matrix4f X = m_camera_transform;
+					for (uint32_t i = 0; i < n; ++i) {
+						xforms[i].start.block<3,3>(0,0) = original_xforms[i].start.block<3,3>(0,0) * X.block<3,3>(0,0);
+						xforms[i].start.col(3) = original_xforms[i].start.col(3)+X.block<3,1>(0,3); 
+						xforms[i].end.block<3,3>(0,0) = original_xforms[i].end.block<3,3>(0,0) * X.block<3,3>(0,0) ;
+						xforms[i].end.col(3) = X.block<3,3>(0,0)*original_xforms[i].end.col(3)+X.block<3,1>(0,3); 
+					}
+					m_nerf.training.update_transforms();
+				}
+			}
 		}
 	}
 
@@ -2415,8 +2509,26 @@ void Testbed::draw_gui() {
 		glClear(GL_DEPTH_BUFFER_BIT);
 		Vector2i res(display_w, display_h);
 		Vector2f focal_length = calc_focal_length(res, m_relative_focal_length, m_fov_axis, m_zoom);
-		draw_mesh_gl(m_mesh.verts, m_mesh.vert_normals, m_mesh.vert_colors, m_mesh.indices, res, focal_length, m_smoothed_camera, render_screen_center(m_screen_center), (int)m_mesh_render_mode);
+		Vector2f screen_center = render_screen_center(m_screen_center);
+		draw_mesh_gl(m_mesh.verts, m_mesh.vert_normals, m_mesh.vert_colors, m_mesh.indices, res, focal_length, m_smoothed_camera, screen_center, (int)m_mesh_render_mode);
 	};
+
+	if (m_render_encoding && m_testbed_mode == ETestbedMode::Nerf && m_single_view && !m_render_ground_truth) {
+		if (get_particle_encoding())
+		{
+			auto draw_encoding = [&]() {
+				glClear(GL_DEPTH_BUFFER_BIT);
+				Vector2i res(display_w, display_h);
+				Vector2f focal_length = calc_focal_length(res, m_relative_focal_length, m_fov_axis, m_zoom);
+				Vector2f screen_center = render_screen_center(m_screen_center);
+				visualize_particle_encoding(res, focal_length, m_smoothed_camera, screen_center);
+			};
+			list->AddCallback([](const ImDrawList*, const ImDrawCmd* cmd) {
+				(*(decltype(draw_encoding)*)cmd->UserCallbackData)();
+			}, &draw_encoding);
+			list->AddCallback(ImDrawCallback_ResetRenderState, nullptr);
+		}
+	}
 
 	// Visualizations are only meaningful when rendering a single view
 	if (m_views.size() == 1) {
@@ -2592,6 +2704,10 @@ void Testbed::prepare_next_camera_path_frame() {
 }
 
 void Testbed::train_and_render(bool skip_rendering) {
+	if(auto* pe = get_particle_encoding()) {
+		pe->m_propagate_to_particle_positions = m_optimize_particle_positions;
+		pe->m_propagate_to_particle_features = m_optimize_particle_features;
+	}
 	if (m_train) {
 		train(m_training_batch_size);
 	}
@@ -3652,8 +3768,13 @@ void Testbed::reset_network(bool clear_density_grid) {
 
 			m_sdf.uses_takikawa_encoding = true;
 		} else {
-			m_encoding.reset(create_encoding<precision_t>(dims.n_input, encoding_config));
-
+			if(encoding_config.contains("otype") && tcnn::equals_case_insensitive(encoding_config["otype"],"Particle")) {
+				m_encoding.reset((tcnn::Encoding<precision_t>*)particle::create_particle_encoding<precision_t>(dims.n_input, encoding_config));
+				m_encoding->set_alignment(16);
+			} else {
+				m_encoding.reset(create_encoding<precision_t>(dims.n_input, encoding_config));
+			}
+			m_network = std::make_shared<NetworkWithInputEncoding<precision_t>>(m_encoding, dims.n_output, network_config);
 			m_sdf.uses_takikawa_encoding = false;
 			if (m_sdf.octree_depth_target == 0 && encoding_config.contains("n_levels")) {
 				m_sdf.octree_depth_target = encoding_config["n_levels"];
@@ -3864,6 +3985,7 @@ void Testbed::train(uint32_t batch_size) {
 	}
 
 	uint32_t n_prep_to_skip = m_testbed_mode == ETestbedMode::Nerf ? tcnn::clamp(m_training_step / 16u, 1u, 16u) : 1u;
+	n_prep_to_skip = 1; //Particles
 	if (m_training_step % n_prep_to_skip == 0) {
 		auto start = std::chrono::steady_clock::now();
 		ScopeGuard timing_guard{[&]() {
@@ -3909,6 +4031,27 @@ void Testbed::train(uint32_t batch_size) {
 		CUDA_CHECK_THROW(cudaStreamSynchronize(m_stream.get()));
 	}
 
+	{ // Get forward and backward timings
+		m_forward_ms.update(m_forward_timer.duration());
+		m_backward_ms.update(m_backward_timer.duration());
+	}	
+	if(auto* pe = get_particle_encoding()) { 
+		if(m_use_physics) {
+			m_physics_timer.start(m_stream.get());
+			pe->physics_step(m_stream.get(),
+			m_n_physics_loops,
+			m_nerf_scale,
+			m_physics_alpha,
+			m_physics_min_distance,
+			m_velocity_damping,
+			m_physics_timestep,
+			m_physics_enable_collisions
+			);
+			m_physics_timer.stop(m_stream.get());
+			CUDA_CHECK_THROW(cudaStreamSynchronize(m_stream.get()));
+			m_physics_ms.update(m_physics_timer.duration());
+		}
+	}
 	if (get_loss_scalar) {
 		update_loss_graph();
 	}

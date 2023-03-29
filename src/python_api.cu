@@ -482,7 +482,28 @@ PYBIND11_MODULE(pyngp, m) {
 			"`thresh` is the density threshold; use 0 for SDF; 2.5 works well for NeRF. "
 			"If the aabb parameter specifies an inside-out (\"empty\") box (default), the current render_aabb bounding box is used."
 		)
-		// Interesting members.
+		;
+	// Particles 
+	testbed
+		.def_readwrite("physics_loops", &Testbed::m_n_physics_loops)
+		.def_readwrite("nerf_scale", &Testbed::m_nerf_scale)
+		.def_readwrite("physics_alpha", &Testbed::m_physics_alpha)
+		.def_readwrite("velocity_damping", &Testbed::m_velocity_damping)
+		.def_readwrite("use_physics", &Testbed::m_use_physics)
+		.def_readwrite("physics_min_distance", &Testbed::m_physics_min_distance)
+		.def_readwrite("physics_timestep", &Testbed::m_physics_timestep)
+		.def_readwrite("optimize_particle_features", &Testbed::m_optimize_particle_features)
+		.def_readwrite("optimize_particle_positions", &Testbed::m_optimize_particle_positions)
+		.def_readwrite("render_particles", &Testbed::m_render_encoding)
+		.def("training_time_ms", [](Testbed& testbed) { return testbed.m_training_ms.ema_val(); })
+		.def("forward_time_ms", [](Testbed& testbed) { return testbed.m_forward_ms.ema_val(); })
+		.def("backward_time_ms", [](Testbed& testbed) { return testbed.m_backward_ms.ema_val(); })
+		.def("grid_time_ms", [](Testbed& testbed) { return testbed.m_training_prep_ms.ema_val(); })
+		.def("physics_time_ms", [](Testbed& testbed) { return testbed.m_physics_ms.ema_val(); })
+		;
+
+	// Interesting members.
+	testbed
 		.def_readwrite("dynamic_res", &Testbed::m_dynamic_res)
 		.def_readwrite("dynamic_res_target_fps", &Testbed::m_dynamic_res_target_fps)
 		.def_readwrite("fixed_res_factor", &Testbed::m_fixed_res_factor)

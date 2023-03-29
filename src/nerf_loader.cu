@@ -158,6 +158,7 @@ NerfDataset create_empty_nerf_dataset(size_t n_images, int aabb_scale, bool is_h
 	result.n_images = n_images;
 	result.sharpness_resolution = { 128, 72 };
 	result.sharpness_data.enlarge( result.sharpness_resolution.x() * result.sharpness_resolution.y() *  result.n_images );
+	result.original_xforms.resize(n_images);
 	result.xforms.resize(n_images);
 	result.metadata.resize(n_images);
 	result.pixelmemory.resize(n_images);
@@ -171,6 +172,8 @@ NerfDataset create_empty_nerf_dataset(size_t n_images, int aabb_scale, bool is_h
 	for (size_t i = 0; i < n_images; ++i) {
 		result.xforms[i].start = Eigen::Matrix<float, 3, 4>::Identity();
 		result.xforms[i].end = Eigen::Matrix<float, 3, 4>::Identity();
+		result.original_xforms[i].start = Eigen::Matrix<float, 3, 4>::Identity();
+		result.original_xforms[i].end = Eigen::Matrix<float, 3, 4>::Identity();
 	}
 	return result;
 }
@@ -346,10 +349,9 @@ NerfDataset load_nerf(const std::vector<fs::path>& jsonpaths, float sharpen_amou
 		auto& frames = json["frames"];
 
 		float sharpness_discard_threshold = json.value("sharpness_discard_threshold", 0.0f); // Keep all by default
-
-		std::sort(frames.begin(), frames.end(), [](const auto& frame1, const auto& frame2) {
-			return SI::natural::compare<std::string>(frame1["file_path"], frame2["file_path"]);
-		});
+		// std::sort(frames.begin(), frames.end(), [](const auto& frame1, const auto& frame2) {
+		// 	return frame1["file_path"] < frame2["file_path"];
+		// });
 
 		for (auto&& frame : frames) {
 			// Compatibility with Windows paths on Linux. (Breaks linux filenames with "\\" in them, which is acceptable for us.)
@@ -395,6 +397,7 @@ NerfDataset load_nerf(const std::vector<fs::path>& jsonpaths, float sharpen_amou
 
 	images.resize(result.n_images);
 	result.xforms.resize(result.n_images);
+	result.original_xforms.resize(result.n_images);
 	result.metadata.resize(result.n_images);
 	result.pixelmemory.resize(result.n_images);
 	result.depthmemory.resize(result.n_images);
@@ -697,6 +700,8 @@ NerfDataset load_nerf(const std::vector<fs::path>& jsonpaths, float sharpen_amou
 
 			result.xforms[i_img].start = result.nerf_matrix_to_ngp(result.xforms[i_img].start);
 			result.xforms[i_img].end = result.nerf_matrix_to_ngp(result.xforms[i_img].end);
+			result.original_xforms[i_img].start = result.xforms[i_img].start; 
+			result.original_xforms[i_img].end = result.xforms[i_img].end; 
 
 			progress.update(++n_loaded);
 		}, futures);

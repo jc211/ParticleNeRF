@@ -1,0 +1,488 @@
+{
+    "computers": {
+        "main": {
+            "base_path": "/home/jad/particle_nerf_dataset/output",
+            "save_path": "/media/jad/DATA/particle_nerf_experiments/new_particle"
+        }
+    },
+    "global": {
+        "n_cameras": 40,
+        "eval_skip": 20,
+        "max_eval": 10,
+        "near": 0.1,
+        "far": 10,
+        "encodings": {
+            "particle": {
+                "search_radius": 0.04,
+                "n_particles": 100000,
+                "position_learning_rate": 0.5,
+                "config": "particle"
+            },
+            "ngp": {
+                "config": "ngp"
+            },
+            "tnv": {
+                "config": "nerf-base/default.py"
+            },
+            "tnv-s": {
+                "config": "nerf-small/default.py"
+            }
+        }
+    },
+    "tests": {
+        "robot-task": {
+            "model": "robot-task",
+            "speeds": "0 2",
+            "speeds_duration": "100 280",
+            "vis_frame": 31,
+            "render_radius": 5,
+            "near": 1.2
+        },
+        "robot": {
+            "model": "robot",
+            "speeds": "0 1 1",
+            "speeds_duration": "100 140 140",
+            "vis_frame": 35,
+            "render_radius": 4,
+            "near": 0.8
+        },
+        "cloth": {
+            "model": "cloth",
+            "speeds": "0 1",
+            "speeds_duration": "100 280",
+            "vis_frame": 39,
+            "render_radius": 5,
+            "near": 0.4
+        },
+        "spring": {
+            "model": "spring",
+            "speeds": "0 1 1",
+            "speeds_duration": "100 140 140",
+            "vis_frame": 31,
+            "render_radius": 4,
+            "near": 0.8
+        },
+        "pendulums": {
+            "model": "pendulums",
+            "speeds": "0 1 1",
+            "speeds_duration": "100 140 140",
+            "vis_frame": 32,
+            "render_radius": 5,
+            "near": 0.3
+        },
+        "wheel": {
+            "model": "wheel",
+            "speeds": "0 1 2",
+            "speeds_duration": "100 140 140",
+            "vis_frame": 35,
+            "render_radius": 2,
+            "near": 0.3
+        },
+        "wheel_speed": {
+            "model": "wheel",
+            "speeds": "0 2 4 6",
+            "speeds_duration": "100 200 200 200",
+            "vis_frame": 35,
+            "render_radius": 2,
+            "near": 0.3
+        },
+        "wheel_no_features": {
+            "model": "wheel",
+            "speeds": "0 2 4 6",
+            "speeds_duration": "100 200 200 200",
+            "vis_frame": 35,
+            "render_radius": 2,
+            "near": 0.3,
+            "encodings": {
+                "particle": {
+                    "no_feat": true
+                }
+            }
+        },
+        "wheel_no_positions": {
+            "model": "wheel",
+            "speeds": "0 2 4 6",
+            "speeds_duration": "100 200 200 200",
+            "vis_frame": 35,
+            "render_radius": 2,
+            "near": 0.3,
+            "encodings": {
+                "particle": {
+                    "no_pos": true
+                }
+            }
+        },
+        "wheel_speed_t10": {
+            "model": "wheel",
+            "speeds": "0 4 8 12",
+            "speeds_duration": "100 100 100 100",
+            "vis_frame": 35,
+            "render_radius": 2,
+            "near": 0.3,
+            "train_steps": 10
+        },
+        "wheel_speed_t15": {
+            "model": "wheel",
+            "speeds": "0 6 12 18",
+            "speeds_duration": "100 75 75 75",
+            "vis_frame": 35,
+            "render_radius": 2,
+            "near": 0.3,
+            "train_steps": 15
+        },
+        "wheel_speed_t20": {
+            "model": "wheel",
+            "speeds": "0 8 16 24",
+            "speeds_duration": "100 50 50 50",
+            "vis_frame": 35,
+            "render_radius": 2,
+            "near": 0.3,
+            "train_steps": 20
+        },
+        "wheel_speed_t40": {
+            "model": "wheel",
+            "speeds": "0 16 24 48",
+            "speeds_duration": "100 25 25 25",
+            "vis_frame": 35,
+            "render_radius": 2,
+            "near": 0.3,
+            "train_steps": 40
+        },
+        "wheel_part_50k": {
+            "model": "wheel",
+            "speeds": "0 2 4 6",
+            "speeds_duration": "100 200 200 200",
+            "vis_frame": 35,
+            "render_radius": 2,
+            "near": 0.3,
+            "encodings": {
+                "particle": {
+                    "n_particles": 50000
+                }
+            }
+        },
+        "wheel_part_100k": {
+            "model": "wheel",
+            "speeds": "0 2 4 6",
+            "speeds_duration": "100 200 200 200",
+            "vis_frame": 35,
+            "render_radius": 2,
+            "near": 0.3,
+            "encodings": {
+                "particle": {
+                    "n_particles": 100000
+                }
+            }
+        },
+        "wheel_part_200k": {
+            "model": "wheel",
+            "speeds": "0 2 4 6",
+            "speeds_duration": "100 200 200 200",
+            "vis_frame": 35,
+            "render_radius": 2,
+            "near": 0.3,
+            "encodings": {
+                "particle": {
+                    "n_particles": 200000
+                }
+            }
+        },
+        "wheel_part_300k": {
+            "model": "wheel",
+            "speeds": "0 2 4 6",
+            "speeds_duration": "100 200 200 200",
+            "vis_frame": 35,
+            "render_radius": 2,
+            "near": 0.3,
+            "encodings": {
+                "particle": {
+                    "n_particles": 300000
+                }
+            }
+        },
+        "wheel_search_3": {
+            "model": "wheel",
+            "speeds": "0 2 4 6",
+            "speeds_duration": "100 200 200 200",
+            "vis_frame": 35,
+            "render_radius": 2,
+            "near": 0.3,
+            "encodings": {
+                "particle": {
+                    "search_radius": 0.03
+                }
+            }
+        },
+        "wheel_search_4": {
+            "model": "wheel",
+            "speeds": "0 2 4 6",
+            "speeds_duration": "100 200 200 200",
+            "vis_frame": 35,
+            "render_radius": 2,
+            "near": 0.3,
+            "encodings": {
+                "particle": {
+                    "search_radius": 0.04
+                }
+            }
+        },
+        "wheel_search_5": {
+            "model": "wheel",
+            "speeds": "0 2 4 6",
+            "speeds_duration": "100 200 200 200",
+            "vis_frame": 35,
+            "render_radius": 2,
+            "near": 0.3,
+            "encodings": {
+                "particle": {
+                    "search_radius": 0.05
+                }
+            }
+        },
+        "wheel_search_6": {
+            "model": "wheel",
+            "speeds": "0 2 4 6",
+            "speeds_duration": "100 200 200 200",
+            "vis_frame": 35,
+            "render_radius": 2,
+            "near": 0.3,
+            "encodings": {
+                "particle": {
+                    "search_radius": 0.06
+                }
+            }
+        },
+        "wheel_adam_005": {
+            "model": "wheel",
+            "speeds": "0 2 4 6",
+            "speeds_duration": "100 200 200 200",
+            "vis_frame": 35,
+            "render_radius": 2,
+            "near": 0.3,
+            "encodings": {
+                "particle": {
+                    "no_physics": true,
+                    "position_learning_rate": 0.0005
+                }
+            }
+        },
+        "wheel_adam_01": {
+            "model": "wheel",
+            "speeds": "0 2 4 6",
+            "speeds_duration": "100 200 200 200",
+            "vis_frame": 35,
+            "render_radius": 2,
+            "near": 0.3,
+            "encodings": {
+                "particle": {
+                    "no_physics": true,
+                    "position_learning_rate": 0.001
+                }
+            }
+        },
+        "wheel_adam_02": {
+            "model": "wheel",
+            "speeds": "0 2 4 6",
+            "speeds_duration": "100 200 200 200",
+            "vis_frame": 35,
+            "render_radius": 2,
+            "near": 0.3,
+            "encodings": {
+                "particle": {
+                    "no_physics": true,
+                    "position_learning_rate": 0.002
+                }
+            }
+        },
+        "wheel_adam_05": {
+            "model": "wheel",
+            "speeds": "0 2 4 6",
+            "speeds_duration": "100 200 200 200",
+            "vis_frame": 35,
+            "render_radius": 2,
+            "near": 0.3,
+            "encodings": {
+                "particle": {
+                    "no_physics": true,
+                    "position_learning_rate": 0.005
+                }
+            }
+        },
+        "wheel_adam_1": {
+            "model": "wheel",
+            "speeds": "0 2 4 6",
+            "speeds_duration": "100 200 200 200",
+            "vis_frame": 35,
+            "render_radius": 2,
+            "near": 0.3,
+            "encodings": {
+                "particle": {
+                    "no_physics": true,
+                    "position_learning_rate": 0.01
+                }
+            }
+        },
+        "wheel_adam_2": {
+            "model": "wheel",
+            "speeds": "0 2 4 6",
+            "speeds_duration": "100 200 200 200",
+            "vis_frame": 35,
+            "render_radius": 2,
+            "near": 0.3,
+            "encodings": {
+                "particle": {
+                    "no_physics": true,
+                    "position_learning_rate": 0.02
+                }
+            }
+        },
+        "wheel_adam_3": {
+            "model": "wheel",
+            "speeds": "0 2 4 6",
+            "speeds_duration": "100 200 200 200",
+            "vis_frame": 35,
+            "render_radius": 2,
+            "near": 0.3,
+            "encodings": {
+                "particle": {
+                    "no_physics": true,
+                    "position_learning_rate": 0.03
+                }
+            }
+        },
+        "wheel_adam_4": {
+            "model": "wheel",
+            "speeds": "0 2 4 6",
+            "speeds_duration": "100 200 200 200",
+            "vis_frame": 35,
+            "render_radius": 2,
+            "near": 0.3,
+            "encodings": {
+                "particle": {
+                    "no_physics": true,
+                    "position_learning_rate": 0.04
+                }
+            }
+        },
+        "wheel_long_running": {
+            "model": "wheel",
+            "speeds": "0 4",
+            "speeds_duration": "100 2000",
+            "vis_frame": 35,
+            "render_radius": 2,
+            "near": 0.3
+        },
+        "wheel_long_running2": {
+            "model": "wheel",
+            "speeds": "0 4",
+            "speeds_duration": "100 2000",
+            "vis_frame": 35,
+            "render_radius": 2,
+            "near": 0.3
+        },
+        "wheel_grad_05": {
+            "model": "wheel",
+            "speeds": "0 2 4 6",
+            "speeds_duration": "100 200 200 200",
+            "vis_frame": 35,
+            "render_radius": 2,
+            "near": 0.3,
+            "encodings": {
+                "particle": {
+                    "position_learning_rate": 0.5
+                }
+            }
+        },
+        "wheel_grad_10": {
+            "model": "wheel",
+            "speeds": "0 2 4 6",
+            "speeds_duration": "100 200 200 200",
+            "vis_frame": 35,
+            "render_radius": 2,
+            "near": 0.3,
+            "encodings": {
+                "particle": {
+                    "position_learning_rate": 1.0
+                }
+            }
+        },
+        "wheel_grad_20": {
+            "model": "wheel",
+            "speeds": "0 2 4 6",
+            "speeds_duration": "100 200 200 200",
+            "vis_frame": 35,
+            "render_radius": 2,
+            "near": 0.3,
+            "encodings": {
+                "particle": {
+                    "position_learning_rate": 2.0
+                }
+            }
+        },
+        "wheel_grad_30": {
+            "model": "wheel",
+            "speeds": "0 2 4 6",
+            "speeds_duration": "100 200 200 200",
+            "vis_frame": 35,
+            "render_radius": 2,
+            "near": 0.3,
+            "encodings": {
+                "particle": {
+                    "position_learning_rate": 3.0
+                }
+            }
+        },
+        "wheel_grad_40": {
+            "model": "wheel",
+            "speeds": "0 2 4 6",
+            "speeds_duration": "100 200 200 200",
+            "vis_frame": 35,
+            "render_radius": 2,
+            "near": 0.3,
+            "encodings": {
+                "particle": {
+                    "position_learning_rate": 4.0
+                }
+            }
+        },
+        "wheel_grad_50": {
+            "model": "wheel",
+            "speeds": "0 2 4 6",
+            "speeds_duration": "100 200 200 200",
+            "vis_frame": 35,
+            "render_radius": 2,
+            "near": 0.3,
+            "encodings": {
+                "particle": {
+                    "position_learning_rate": 5.0
+                }
+            }
+        },
+        "wheel_grad_60": {
+            "model": "wheel",
+            "speeds": "0 2 4 6",
+            "speeds_duration": "100 200 200 200",
+            "vis_frame": 35,
+            "render_radius": 2,
+            "near": 0.3,
+            "encodings": {
+                "particle": {
+                    "position_learning_rate": 6.0
+                }
+            }
+        },
+        "wheel_grad_80": {
+            "model": "wheel",
+            "speeds": "0 2 4 6",
+            "speeds_duration": "100 200 200 200",
+            "vis_frame": 35,
+            "render_radius": 2,
+            "near": 0.3,
+            "encodings": {
+                "particle": {
+                    "position_learning_rate": 8.0
+                }
+            }
+        }
+    }
+}

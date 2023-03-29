@@ -72,6 +72,7 @@ struct NerfDataset {
 
 	void update_metadata(int first = 0, int last = -1);
 
+	std::vector<TrainingXForm> original_xforms;
 	std::vector<TrainingXForm> xforms;
 	std::vector<std::string> paths;
 	tcnn::GPUMemory<float> sharpness_data;

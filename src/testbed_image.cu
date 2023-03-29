@@ -275,6 +275,17 @@ void Testbed::train_image(size_t target_batch_size, bool get_loss_scalar, cudaSt
 
 	{
 		auto ctx = m_trainer->training_step(stream, training_batch_matrix, training_target_matrix, nullptr, false);
+
+		if(m_train_encoding) {
+			if (auto particle_encoding = get_particle_encoding()) 
+			{
+				particle_encoding->training_step(
+					m_stream.get(),
+					m_use_physics
+					);
+			}
+		}
+
 		if (get_loss_scalar) {
 			m_loss_scalar.update(m_trainer->loss(stream, *ctx));
 		}

@@ -25,6 +25,9 @@
 #include <neural-graphics-primitives/shared_queue.h>
 #include <neural-graphics-primitives/thread_pool.h>
 #include <neural-graphics-primitives/trainable_buffer.cuh>
+#include <thrust/extrema.h>
+#include <particles/particle_encoding.h>
+#include <particles/gpu_timer.h>
 
 #ifdef NGP_GUI
 #  include <neural-graphics-primitives/openxr_hmd.h>
@@ -867,6 +870,44 @@ public:
 		tcnn::GPUMemory<uint32_t> hit_counter = {};
 		tcnn::GPUMemory<Eigen::Array4f> radiance_and_density;
 	} m_volume;
+
+
+	////// PARTICLES
+	particle::ParticleEncoding<precision_t>* get_particle_encoding() const;
+	tcnn::GPUMemory<float> get_density_on_points(NerfPosition* positions, uint32_t n_points);
+
+	#ifdef NGP_GUI
+	void visualize_particle_encoding(const Eigen::Vector2i& resolution, const Eigen::Vector2f& focal_length, const Eigen::Matrix<float, 3, 4>& camera_matrix, const Eigen::Vector2f& screen_center);
+	#endif
+
+	bool m_move_cameras_widget = false;
+	Eigen::Matrix4f m_camera_transform = Eigen::Matrix4f::Identity();
+
+	int m_n_particle_level = 0;
+	bool m_render_encoding = false;
+	bool m_visualize_particle_cube = false;
+	bool m_optimize_particle_features = true;
+	bool m_optimize_particle_positions = true;
+	bool m_use_physics = true;
+
+	//Physics
+	int m_n_physics_loops = 1;
+	float m_velocity_damping = 0.96f;
+	float m_physics_timestep = 0.01f;
+	float m_nerf_scale = 4.0f;
+	float m_physics_min_distance = 0.01f;
+	float m_physics_alpha = 0;
+	float m_physics_enable_collisions = true;
+
+	// Timings
+	particle::GpuTimer m_forward_timer;
+	Ema m_forward_ms = {EEmaType::Time, 100};
+	particle::GpuTimer m_backward_timer;
+	Ema m_backward_ms = {EEmaType::Time, 100};
+	particle::GpuTimer m_physics_timer;
+	Ema m_physics_ms = {EEmaType::Time, 100};
+
+	////// PARTICLES_END
 
 	float m_camera_velocity = 1.0f;
 	EColorSpace m_color_space = EColorSpace::Linear;
