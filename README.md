@@ -3,7 +3,7 @@
 
 > __ParticleNeRF: Particle Based Encoding for Online Neural Radiance Fields__  
 > Jad Abou-Chakra, [Feras Dayoub](https://ferasdayoub.com/), [Niko Sunderhauf](https://nikosuenderhauf.github.io/)\
-> __[Project page](https://sites.google.com/view/particlenerf)&nbsp;/ [Paper](https://arxiv.org/abs/2211.04041)&nbsp;__
+> __[Project page](https://sites.google.com/view/particlenerf)&nbsp;/ [Paper](https://arxiv.org/abs/2211.04041)&nbsp;/ [Dataset](https://zenodo.org/record/7784157)&nbsp;__
 
 ParticleNeRF is a fork of [__instant_ngp__](https://github.com/NVlabs/instant-ngp) that uses a particle-based encoding to enable quick adaptation to dynamic objects. By associating features with particles in space, we can backpropagate the photometric reconstruction loss into the particles' position gradients, which can then be interpreted as velocity vectors. To handle collisions, a lightweight physics system governs the movement of the features, allowing them to move freely with the changing scene geometry. We demonstrate ParticleNeRF on various dynamic scenes containing translating, rotating, articulated, and deformable objects.
 
